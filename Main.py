@@ -1,15 +1,14 @@
 import sys
 import requests
-import csv
 import sqlite3
+from fpdf import FPDF
 from PyQt5.QtWidgets import *
 
-
-class ResepApp(QMainWindow):
+class MasakApa(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("MasakApa")
-        self.setMinimumSize(1000, 600)
+        self.setMinimumSize(900, 300)
         self.data_resep = []
         self.current_theme = "light"
 
@@ -45,8 +44,8 @@ class ResepApp(QMainWindow):
         view_menu = menubar.addMenu("Tampilan")
         help_menu = menubar.addMenu("Help")
 
-        export_csv_action = QAction("Export ke CSV", self)
-        export_csv_action.triggered.connect(self.export_csv)
+        export_pdf_action = QAction("Export ke PDF", self)
+        export_pdf_action.triggered.connect(self.export_pdf)
 
         clear_action = QAction("Clear Tabel", self)
         clear_action.triggered.connect(self.clear_table)
@@ -60,7 +59,7 @@ class ResepApp(QMainWindow):
         help_action = QAction("Tentang", self)
         help_action.triggered.connect(self.show_about)
 
-        file_menu.addAction(export_csv_action)
+        file_menu.addAction(export_pdf_action)
         file_menu.addAction(clear_action)
         file_menu.addAction(exit_action)
         view_menu.addAction(toggle_theme_action)
@@ -175,27 +174,58 @@ class ResepApp(QMainWindow):
                 bahan += f"- {bahan_nama}: {bahan_jml}<br>"
 
         text = f"""
-<b>Nama:</b> {resep.get('strMeal', '')}<br>
-<b>Kategori:</b> {resep.get('strCategory', '')}<br>
-<b>Negara:</b> {resep.get('strArea', '')}<br>
-<b>Instruksi:</b><br>{resep.get('strInstructions', '')}<br><br>
-<b>Bahan-bahan:</b><br>{bahan}
+            <b>Nama:</b> {resep.get('strMeal', '')}<br>
+            <b>Kategori:</b> {resep.get('strCategory', '')}<br>
+            <b>Negara:</b> {resep.get('strArea', '')}<br>
+            <b>Instruksi:</b><br>{resep.get('strInstructions', '')}<br><br>
+            <b>Bahan-bahan:</b><br>{bahan}
         """
         self.detail.setHtml(text)
 
-    def export_csv(self):
-        path, _ = QFileDialog.getSaveFileName(self, "Simpan File", "", "CSV Files (*.csv)")
+    def export_pdf(self):
+        selected_row = self.table.currentRow()
+        if selected_row == -1:
+            QMessageBox.warning(self, "Peringatan", "Pilih resep terlebih dahulu!")
+            return
+
+        resep = self.data_resep[selected_row]["full"]
+        
+        path, _ = QFileDialog.getSaveFileName(self, "Simpan File", "", "PDF Files (*.pdf)")
         if not path:
             return
+
         try:
-            with open(path, "w", newline="", encoding="utf-8") as file:
-                writer = csv.writer(file)
-                writer.writerow(["Nama", "Kategori", "Negara", "Instruksi", "Bahan"])
-                for d in self.data_resep:
-                    writer.writerow([d["nama"], d["kategori"], d["Negara"], d["instruksi"], d["bahan"]])
-            QMessageBox.information(self, "Sukses", "Data berhasil diekspor.")
+            pdf = FPDF()
+            pdf.add_page()
+            pdf.set_font("Arial", "B", size=16)
+            pdf.cell(0, 10, txt="Detail Resep", ln=True, align='C')
+            pdf.ln(10)
+
+            pdf.set_font("Arial", size=12)
+            pdf.cell(0, 10, f"Nama: {resep.get('strMeal', '')}", ln=True)
+            pdf.cell(0, 10, f"Kategori: {resep.get('strCategory', '')}", ln=True)
+            pdf.cell(0, 10, f"Negara: {resep.get('strArea', '')}", ln=True)
+            pdf.ln(5)
+            
+            pdf.cell(0, 10, "Instruksi:", ln=True)
+            instruksi = resep.get('strInstructions', '').replace("\n", "\n\n")
+            pdf.multi_cell(0, 10, instruksi)
+            pdf.ln(10)
+            
+            pdf.cell(0, 10, "Bahan-bahan:", ln=True)
+            bahan = ""
+            for i in range(1, 21):
+                bahan_nama = resep.get(f"strIngredient{i}")
+                bahan_jml = resep.get(f"strMeasure{i}")
+                if bahan_nama and bahan_nama.strip():
+                    bahan += f"- {bahan_nama}: {bahan_jml}\n"
+            pdf.multi_cell(0, 10, bahan)
+            
+            pdf.output(path)
+            QMessageBox.information(self, "Sukses", "Data berhasil diekspor ke PDF.")
+
         except Exception as e:
-            QMessageBox.critical(self, "Gagal", str(e))
+            QMessageBox.critical(self, "Gagal", f"Gagal membuat PDF: {str(e)}")
 
     def clear_table(self):
         self.table.setRowCount(0)
@@ -206,7 +236,9 @@ class ResepApp(QMainWindow):
         QMessageBox.information(
             self,
             "Tentang",
-            "Aplikasi PyQt5 - Informasi Resep Masakan\nMenggunakan TheMealDB API\nBy: Muhammad Ridho Fahru Rozy"
+            "Aplikasi PyQt5 - MasakApa\n"
+            "Data yang didapatkan berasal dari TheMealDB API\n"
+            "By: Muhammad Ridho Fahru Rozy"
         )
 
     def toggle_theme(self):
@@ -224,6 +256,6 @@ class ResepApp(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = ResepApp()
+    window = MasakApa()
     window.show()
     sys.exit(app.exec_())
